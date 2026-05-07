@@ -211,6 +211,9 @@ namespace APIManagementTemplate
                             this.PolicyHandleProperties(pol, apiTemplateResource.Value<string>("name"),
                                 GetOperationName(operationInstance));
 
+                            this.PolicyHandlePolicyFragments(pol, apiTemplateResource.Value<string>("name"),
+                                GetOperationName(operationInstance));
+
                             var operationSuffix = apiInstance.Value<string>("name") + "_" +
                                                   operationInstance.Value<string>("name");
                             //Handle Azure Resources
@@ -318,7 +321,7 @@ namespace APIManagementTemplate
                             var policyTemplateResource = template.CreatePolicy(policy);
                             this.PolicyHandleProperties(policy, apiTemplateResource.Value<string>("name"), null);
                             apiTemplateResource.Value<JArray>("resources").Add(policyTemplateResource);
-
+                            this.PolicyHandlePolicyFragments(policy, apiTemplateResource.Value<string>("name"), null);
 
                             if (!string.IsNullOrEmpty(backendid) && exportBackendInstances)
                             {
@@ -341,6 +344,18 @@ namespace APIManagementTemplate
                             
                         }
                     }
+
+                    foreach (string policyFragmentName in identifiedFragments)
+                    {
+                        var policyFragment = await resourceCollector.GetResource(GetAPIMResourceIDString() + $"/policyFragments/{policyFragmentName}");
+                        var policyFragmentResource = template.CreatePolicyFragment(policyFragment);
+                        apiTemplateResource.Value<JArray>("resources").Add(policyFragmentResource);
+
+                        // Add the namedvalues which are used in the policy fragment
+                        var policyContent = policyFragment["properties"].Value<string>("value");
+                        HandleProperties("Global", "Global", policyContent);
+                    }
+
                     if (!exportSwaggerDefinition)
                     {
                         // Specify older apiversion, because newer versions do not return schema contents.
@@ -688,6 +703,29 @@ namespace APIManagementTemplate
             }
         }
 
+        public void PolicyHandlePolicyFragments(JObject policy, string apiname, string operationName)
+        {
+            var policyPropertyName = policy["properties"].Value<string>("policyContent") == null ? "value" : "policyContent";
+            var policyContent = policy["properties"].Value<string>(policyPropertyName);
+
+            if (policyContent == null)
+                return;
+
+            var match = Regex.Match(policyContent, "include-fragment fragment-id=\"(?<name>[-_.a-zA-Z0-9]*)\"");
+
+            while (match.Success)
+            {
+                string name = match.Groups["name"].Value;
+                var idp = identifiedFragments.FirstOrDefault(pp => pp.Equals(name));
+                if (idp == null)
+                {
+                    this.identifiedFragments.Add(name);
+                }
+                match = match.NextMatch();
+            }
+        }
+
+        public List<String> identifiedFragments = new List<String>();
         public List<Property> identifiedProperties = new List<Property>();
         public List<JObject> openidConnectProviders = null;
 

@@ -211,8 +211,14 @@ namespace APIManagementTemplate
                             this.PolicyHandleProperties(pol, apiTemplateResource.Value<string>("name"),
                                 GetOperationName(operationInstance));
 
-                            this.PolicyHandlePolicyFragments(pol, apiTemplateResource.Value<string>("name"),
+                            var dependsOnArray =this.PolicyHandlePolicyFragments(pol, apiTemplateResource.Value<string>("name"),
                                 GetOperationName(operationInstance));
+
+                            if (apiTemplateResource.Value<JArray>("dependsOn") == null)
+                                apiTemplateResource["dependsOn"] = new JArray();
+
+                            // Add all fragments which are used in the policy as dependencies
+                            dependsOnArray.ToList().ForEach(f => apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
 
                             var operationSuffix = apiInstance.Value<string>("name") + "_" +
                                                   operationInstance.Value<string>("name");
@@ -234,9 +240,6 @@ namespace APIManagementTemplate
                                 JObject backendInstance = bo?.backendInstance;
                                 if (backendInstance != null)
                                 {
-                                    if (apiTemplateResource.Value<JArray>("dependsOn") == null)
-                                        apiTemplateResource["dependsOn"] = new JArray();
-
                                     //add dependeOn
                                     apiTemplateResource.Value<JArray>("dependsOn").Add(
                                         $"[resourceId('Microsoft.ApiManagement/service/backends', parameters('{GetServiceName(servicename)}'), '{backendInstance.Value<string>("name")}')]");
@@ -321,7 +324,13 @@ namespace APIManagementTemplate
                             var policyTemplateResource = template.CreatePolicy(policy);
                             this.PolicyHandleProperties(policy, apiTemplateResource.Value<string>("name"), null);
                             apiTemplateResource.Value<JArray>("resources").Add(policyTemplateResource);
-                            this.PolicyHandlePolicyFragments(policy, apiTemplateResource.Value<string>("name"), null);
+                            var dependsOnArray = this.PolicyHandlePolicyFragments(policy, apiTemplateResource.Value<string>("name"), null);
+
+                            if (apiTemplateResource.Value<JArray>("dependsOn") == null)
+                                apiTemplateResource["dependsOn"] = new JArray();
+
+                            // Add all fragments which are used in the policy as dependencies
+                            dependsOnArray.ToList().ForEach(f => apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
 
                             if (!string.IsNullOrEmpty(backendid) && exportBackendInstances)
                             {
@@ -329,9 +338,6 @@ namespace APIManagementTemplate
                                 JObject backendInstance = bo.backendInstance;
                                 if (backendInstance != null)
                                 {
-                                    if (apiTemplateResource.Value<JArray>("dependsOn") == null)
-                                        apiTemplateResource["dependsOn"] = new JArray();
-
                                     //add dependeOn
                                     apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/backends', parameters('{GetServiceName(servicename)}'), '{backendInstance.Value<string>("name")}')]");
                                 }
@@ -704,13 +710,14 @@ namespace APIManagementTemplate
             }
         }
 
-        public void PolicyHandlePolicyFragments(JObject policy, string apiname, string operationName)
+        public JArray PolicyHandlePolicyFragments(JObject policy, string apiname, string operationName)
         {
             var policyPropertyName = policy["properties"].Value<string>("policyContent") == null ? "value" : "policyContent";
             var policyContent = policy["properties"].Value<string>(policyPropertyName);
+            var dependsOnArray = new JArray();
 
             if (policyContent == null)
-                return;
+                return dependsOnArray;
 
             var match = Regex.Match(policyContent, "fragment-id=\"(?<name>[-_.a-zA-Z0-9]*)\"");
 
@@ -722,8 +729,11 @@ namespace APIManagementTemplate
                 {
                     this.identifiedFragments.Add(name);
                 }
+                dependsOnArray.Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{name}')]");
                 match = match.NextMatch();
             }
+
+            return dependsOnArray;
         }
 
         public List<String> identifiedFragments = new List<String>();

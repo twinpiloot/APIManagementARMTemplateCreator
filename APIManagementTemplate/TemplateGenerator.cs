@@ -345,17 +345,6 @@ namespace APIManagementTemplate
                         }
                     }
 
-                    foreach (string policyFragmentName in identifiedFragments)
-                    {
-                        var policyFragment = await resourceCollector.GetResource(GetAPIMResourceIDString() + $"/policyFragments/{policyFragmentName}");
-                        var policyFragmentResource = template.CreatePolicyFragment(policyFragment);
-                        apiTemplateResource.Value<JArray>("resources").Add(policyFragmentResource);
-
-                        // Add the namedvalues which are used in the policy fragment
-                        var policyContent = policyFragment["properties"].Value<string>("value");
-                        HandleProperties("Global", "Global", policyContent);
-                    }
-
                     if (!exportSwaggerDefinition)
                     {
                         // Specify older apiversion, because newer versions do not return schema contents.
@@ -401,6 +390,18 @@ namespace APIManagementTemplate
                     }
 
                 }
+            }
+
+            foreach (string policyFragmentName in identifiedFragments)
+            {
+                var policyFragment = await resourceCollector.GetResource(GetAPIMResourceIDString() + $"/policyFragments/{policyFragmentName}");
+                var policyFragmentResource = template.CreatePolicyFragment(policyFragment);
+                var apim = await resourceCollector.GetResource(GetAPIMResourceIDString());
+                apim.Add(policyFragmentResource);
+
+                // Add the namedvalues which are used in the policy fragment
+                var policyContent = policyFragment["properties"].Value<string>("value");
+                HandleProperties("Global", "Global", policyContent);
             }
 
             // Export all groups if we don't export the products.
@@ -711,7 +712,7 @@ namespace APIManagementTemplate
             if (policyContent == null)
                 return;
 
-            var match = Regex.Match(policyContent, "include-fragment fragment-id=\"(?<name>[-_.a-zA-Z0-9]*)\"");
+            var match = Regex.Match(policyContent, "fragment-id=\"(?<name>[-_.a-zA-Z0-9]*)\"");
 
             while (match.Success)
             {

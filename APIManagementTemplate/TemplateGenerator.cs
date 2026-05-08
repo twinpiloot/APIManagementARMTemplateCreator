@@ -213,11 +213,11 @@ namespace APIManagementTemplate
 
                             var dependsOnArray = this.HandlePolicyFragments(pol, apiTemplateResource.Value<string>("name"), GetOperationName(operationInstance));
 
-                            //if (apiTemplateResource.Value<JArray>("dependsOn") == null)
-                            //    apiTemplateResource["dependsOn"] = new JArray();
+                            if (apiTemplateResource.Value<JArray>("dependsOn") == null)
+                                apiTemplateResource["dependsOn"] = new JArray();
 
                             // Add all fragments which are used in the policy as dependencies
-                            // dependsOnArray.ToList().ForEach(f => apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
+                            dependsOnArray.ToList().ForEach(f => apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
 
                             var operationSuffix = apiInstance.Value<string>("name") + "_" +
                                                   operationInstance.Value<string>("name");
@@ -325,11 +325,11 @@ namespace APIManagementTemplate
                             apiTemplateResource.Value<JArray>("resources").Add(policyTemplateResource);
                             var dependsOnArray = this.HandlePolicyFragments(policy, apiTemplateResource.Value<string>("name"), null);
 
-                            //if (apiTemplateResource.Value<JArray>("dependsOn") == null)
-                            //    apiTemplateResource["dependsOn"] = new JArray();
+                            if (apiTemplateResource.Value<JArray>("dependsOn") == null)
+                                apiTemplateResource["dependsOn"] = new JArray();
 
                             // Add all fragments which are used in the policy as dependencies
-                            //dependsOnArray.ToList().ForEach(f => apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
+                            dependsOnArray.ToList().ForEach(f => apiTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
 
                             if (!string.IsNullOrEmpty(backendid) && exportBackendInstances)
                             {
@@ -401,8 +401,24 @@ namespace APIManagementTemplate
             {
                 var policyFragment = await resourceCollector.GetResource(GetAPIMResourceIDString() + $"/policyFragments/{policyFragmentName}");
                 var policyFragmentResource = template.CreatePolicyFragment(policyFragment);
-                var apim = await resourceCollector.GetResource(GetAPIMResourceIDString());
-                apim.Add(policyFragmentResource);
+
+                // Add the policy fragment to the template resources
+                if (exportPIManagementInstance)
+                {
+                    // Find the APIM template resource and add the fragment to its resources array
+                    var apimTemplateResource = template.resources.FirstOrDefault(r =>
+                        r.Value<string>("type") == "Microsoft.ApiManagement/service");
+
+                    if (apimTemplateResource != null && apimTemplateResource["resources"] != null)
+                    {
+                        apimTemplateResource.Value<JArray>("resources").Add(policyFragmentResource);
+                    }
+                }
+                else
+                {
+                    // If not exporting APIM instance, add as top-level resource
+                    template.resources.Add(policyFragmentResource);
+                }
 
                 // Add the namedvalues which are used in the policy fragment
                 var policyContent = policyFragment["properties"].Value<string>("value");

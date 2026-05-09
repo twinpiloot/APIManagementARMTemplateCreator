@@ -397,34 +397,6 @@ namespace APIManagementTemplate
                 }
             }
 
-            foreach (string policyFragmentName in identifiedFragments)
-            {
-                var policyFragment = await resourceCollector.GetResource(GetAPIMResourceIDString() + $"/policyFragments/{policyFragmentName}");
-                var policyFragmentResource = template.CreatePolicyFragment(policyFragment);
-
-                // Add the policy fragment to the template resources
-                if (exportPIManagementInstance)
-                {
-                    // Find the APIM template resource and add the fragment to its resources array
-                    var apimTemplateResource = template.resources.FirstOrDefault(r =>
-                        r.Value<string>("type") == "Microsoft.ApiManagement/service");
-
-                    if (apimTemplateResource != null && apimTemplateResource["resources"] != null)
-                    {
-                        apimTemplateResource.Value<JArray>("resources").Add(policyFragmentResource);
-                    }
-                }
-                else
-                {
-                    // If not exporting APIM instance, add as top-level resource
-                    template.resources.Add(policyFragmentResource);
-                }
-
-                // Add the namedvalues which are used in the policy fragment
-                var policyContent = policyFragment["properties"].Value<string>("value");
-                HandleProperties("Global", "Global", policyContent);
-            }
-
             // Export all groups if we don't export the products.
             if (exportGroups && !exportProducts)
             {
@@ -503,10 +475,44 @@ namespace APIManagementTemplate
                             }
 
                             productTemplateResource.Value<JArray>("resources").Add(pol);
+
                             this.PolicyHandleProperties(policy, productTemplateResource.Value<string>("name"), null);
+
+                            var dependsOnArray = this.HandlePolicyFragments(pol, productTemplateResource.Value<string>("name"), null);
+
+                            // Add all fragments which are used in the policy as dependencies
+                            dependsOnArray.ToList().ForEach(f => productTemplateResource.Value<JArray>("dependsOn").Add($"[resourceId('Microsoft.ApiManagement/service/policyFragments', parameters('{GetServiceName(servicename)}'), '{f}')]"));
                         }
                     }
                 }
+            }
+
+            foreach (string policyFragmentName in identifiedFragments)
+            {
+                var policyFragment = await resourceCollector.GetResource(GetAPIMResourceIDString() + $"/policyFragments/{policyFragmentName}");
+                var policyFragmentResource = template.CreatePolicyFragment(policyFragment);
+
+                // Add the policy fragment to the template resources
+                if (exportPIManagementInstance)
+                {
+                    // Find the APIM template resource and add the fragment to its resources array
+                    var apimTemplateResource = template.resources.FirstOrDefault(r =>
+                        r.Value<string>("type") == "Microsoft.ApiManagement/service");
+
+                    if (apimTemplateResource != null && apimTemplateResource["resources"] != null)
+                    {
+                        apimTemplateResource.Value<JArray>("resources").Add(policyFragmentResource);
+                    }
+                }
+                else
+                {
+                    // If not exporting APIM instance, add as top-level resource
+                    template.resources.Add(policyFragmentResource);
+                }
+
+                // Add the namedvalues which are used in the policy fragment
+                var policyContent = policyFragment["properties"].Value<string>("value");
+                HandleProperties("Global", "Global", policyContent);
             }
 
             var properties = await resourceCollector.GetResource(GetAPIMResourceIDString() + "/namedValues", suffix: "$top=1000");
